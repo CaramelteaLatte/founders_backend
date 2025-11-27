@@ -24,6 +24,7 @@ import base64
 import json
 from datetime import datetime
 
+from storage_utils import load_records, upsert_record, write_records
 
 WENSHU_LOGIN_URL = "https://wenshu.court.gov.cn/website/wenshu/181010CARHS5BS3C/index.html?open=login"
 
@@ -101,6 +102,8 @@ def fill_login_and_screenshot(
     password: str,
     save_to_desktop: bool = True,
     search_keyword: str | None = None,
+    output_directory: str | None = None,
+    record_name: str | None = None,
 ) -> dict | None:
     _clear_proxy_env_vars()
     chrome_options = _build_chrome_options()
@@ -438,16 +441,20 @@ def fill_login_and_screenshot(
         except Exception as _:
             print("执行返回页搜索步骤时出现异常，继续截图")
 
-        # 组织输出目录（若提供了搜索关键词，则以关键词命名目录与文件）
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop") if save_to_desktop else os.getcwd()
-        folder_name = search_kw if 'search_kw' in locals() and search_kw else "文书网登录"
-        save_dir = os.path.join(desktop_path, folder_name)
+        # 组织输出目录（可通过参数覆盖默认行为）
+        if output_directory:
+            save_dir = os.fspath(output_directory)
+        else:
+            desktop_path = os.path.join(os.path.expanduser("~"), "Desktop") if save_to_desktop else os.getcwd()
+            folder_name = search_kw if 'search_kw' in locals() and search_kw else "文书网登录"
+            save_dir = os.path.join(desktop_path, folder_name)
         if not os.path.exists(save_dir):
             os.makedirs(save_dir, exist_ok=True)
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         _ensure_fullpage_screenshot(driver)
-        screenshot_path = os.path.join(save_dir, f"WENSHU_{search_kw}_{ts}.png")
+        screenshot_label = search_kw if search_kw else "搜索"
+        screenshot_path = os.path.join(save_dir, f"WENSHU_{screenshot_label}_{ts}.png")
         driver.save_screenshot(screenshot_path)
         print(f"截图已保存：{screenshot_path}")
 
@@ -464,7 +471,8 @@ def fill_login_and_screenshot(
 
         # 写入 JSON（与 amac/qcc 对齐，列表累积）
         try:
-            json_filename = f"{(search_kw if search_kw else username)}.json"
+            record_basename = record_name or (search_kw if search_kw else username)
+            json_filename = f"{record_basename}.json"
             json_path = os.path.join(save_dir, json_filename)
             record = {
                 "item": "WENSHU_裁判文书网搜索",
@@ -478,22 +486,9 @@ def fill_login_and_screenshot(
                 "screenshot": screenshot_path,
                 "queried_at": ts
             }
-            all_records = []
-            if os.path.exists(json_path):
-                try:
-                    with open(json_path, "r", encoding="utf-8") as f:
-                        existing = json.load(f)
-                        if isinstance(existing, list):
-                            all_records = existing
-                        elif isinstance(existing, dict):
-                            all_records = [existing]
-                except json.JSONDecodeError:
-                    print(f"警告: 无法解析现有JSON文件 {json_path}，将覆盖。")
-                except Exception as e:
-                    print(f"读取现有JSON文件时出错 {json_path}: {str(e)}，将覆盖。")
-            all_records.append(record)
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(all_records, f, indent=2, ensure_ascii=False)
+            all_records = load_records(json_path)
+            updated_records = upsert_record(all_records, record)
+            write_records(json_path, updated_records)
             print(f"查询记录已保存：{json_path}")
         except Exception as e:
             print(f"保存JSON文件时出错: {str(e)}")
@@ -510,7 +505,12 @@ def fill_login_and_screenshot(
             print("操作完成")
 
 
-def search_wenshu(keyword: str, save_to_desktop: bool = True):
+def search_wenshu(
+    keyword: str,
+    save_to_desktop: bool = True,
+    target_directory: str | None = None,
+    record_name: str | None = None,
+):
     username = WENSHU_ACCOUNT.get("username", "").strip()
     password = WENSHU_ACCOUNT.get("password", "").strip()
     if not username or not password:
@@ -520,6 +520,8 @@ def search_wenshu(keyword: str, save_to_desktop: bool = True):
         password=password,
         save_to_desktop=save_to_desktop,
         search_keyword=keyword,
+        output_directory=target_directory,
+        record_name=record_name,
     )
 
 
@@ -549,4 +551,3 @@ if __name__ == "__main__":
     #     print("\n收到 Ctrl+C，程序中断")
     #     # 执行清理操作或退出
     #     exit(0)
-

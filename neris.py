@@ -23,6 +23,8 @@ import os
 import json
 from urllib.parse import quote
 
+from storage_utils import load_records, upsert_record, write_records
+
 
 def _build_chrome_options() -> Options:
     chrome_options = Options()
@@ -277,25 +279,9 @@ def search_and_get_results(legal_name: str, company_name: str = None):
                 "queried_at": ts
             }
             json_path = os.path.join(save_dir, f"{json_filename}.json")
-            if os.path.exists(json_path):
-                # 如果已有文件，尽量在原有基础上追加
-                try:
-                    with open(json_path, "r", encoding="utf-8") as f:
-                        existing = json.load(f)
-                except Exception:
-                    existing = None
-                # 统一存为列表
-                if isinstance(existing, list):
-                    existing.append(record)
-                    data_to_write = existing
-                elif isinstance(existing, dict):
-                    data_to_write = [existing, record]
-                else:
-                    data_to_write = [record]
-            else:
-                data_to_write = [record]
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(data_to_write, f, indent=2, ensure_ascii=False)
+            existing_records = load_records(json_path)
+            updated_records = upsert_record(existing_records, record)
+            write_records(json_path, updated_records)
             print(f"查询结果已写入/更新：{json_path}")
         except Exception as write_err:
             print(f"写入JSON时出错：{write_err}")
@@ -338,4 +324,3 @@ if __name__ == "__main__":
             sys.exit(1)
 
     search_and_get_results(name)
-

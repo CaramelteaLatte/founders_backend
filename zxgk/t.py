@@ -24,6 +24,13 @@ import sys
 import os
 import json
 from urllib.parse import quote
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
+from storage_utils import load_records, upsert_record, write_records
 
 
 def _clear_proxy_env_vars() -> None:
@@ -162,23 +169,9 @@ def search_zxgk(person_name: str, id_number: str):
 
         json_path = os.path.join(save_dir, f"{person_name}.json")
         try:
-            if os.path.exists(json_path):
-                try:
-                    with open(json_path, "r", encoding="utf-8") as f:
-                        existing = json.load(f)
-                except Exception:
-                    existing = None
-                if isinstance(existing, list):
-                    existing.append(record)
-                    data_to_write = existing
-                elif isinstance(existing, dict):
-                    data_to_write = [existing, record]
-                else:
-                    data_to_write = [record]
-            else:
-                data_to_write = [record]
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(data_to_write, f, indent=2, ensure_ascii=False)
+            existing_records = load_records(json_path)
+            updated_records = upsert_record(existing_records, record)
+            write_records(json_path, updated_records)
             print(f"查询结果已写入/更新：{json_path}")
         except Exception as write_err:
             print(f"写入JSON时出错：{write_err}")
@@ -218,5 +211,3 @@ if __name__ == "__main__":
             sys.exit(1)
 
     search_zxgk(p_name, p_id)
-
-

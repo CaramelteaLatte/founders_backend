@@ -23,7 +23,14 @@ import re
 import random
 from urllib.parse import quote
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
+from storage_utils import load_records, upsert_record, write_records
 
 # 默认Cookie（已写死）
 # 公司的cookie。。。。为什么不开一个团体的账号呢。这会导致这个账号很容易在爬虫的时候出问题
@@ -667,23 +674,9 @@ def search_and_screenshot(search_query, cookies=None, save_to_desktop=True, save
                 "screenshot": filepath,
                 "queried_at": timestamp
             }
-            if os.path.exists(json_filepath):
-                try:
-                    with open(json_filepath, "r", encoding="utf-8") as f:
-                        existing = json.load(f)
-                except Exception:
-                    existing = None
-                if isinstance(existing, list):
-                    existing.append(record)
-                    data_to_write = existing
-                elif isinstance(existing, dict):
-                    data_to_write = [existing, record]
-                else:
-                    data_to_write = [record]
-            else:
-                data_to_write = [record]
-            with open(json_filepath, "w", encoding="utf-8") as f:
-                json.dump(data_to_write, f, indent=2, ensure_ascii=False)
+            existing_records = load_records(json_filepath)
+            updated_records = upsert_record(existing_records, record)
+            write_records(json_filepath, updated_records)
             print(f"查询结果已写入/更新：{json_filepath}")
         except Exception as write_err:
             print(f"写入JSON时出错：{write_err}")

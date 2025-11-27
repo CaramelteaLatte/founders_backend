@@ -116,10 +116,17 @@ def _run_neris_for_people(names: List[str], company_folder: Path, company_name: 
     return results
 
 
-def _run_wenshu_for_keywords(keywords: List[str], company_folder: Path, max_retries: int = 3, retry_delay: float = 2.0):
+def _run_wenshu_for_keywords(
+    keywords: List[str],
+    company_folder: Path,
+    company_name: str,
+    max_retries: int = 3,
+    retry_delay: float = 2.0,
+):
     print("\n==> [Wenshu] 开始逐个关键词搜索并截图")
     results = []
     seen = set()
+    target_dir_resolved = company_folder.resolve()
     for keyword in _deduplicate_keep_order(keywords):
         normalized = keyword.strip()
         if not normalized:
@@ -132,7 +139,12 @@ def _run_wenshu_for_keywords(keywords: List[str], company_folder: Path, max_retr
         result = None
         for attempt in range(1, max_retries + 1):
             try:
-                result = wenshu_search(keyword, save_to_desktop=True)
+                result = wenshu_search(
+                    keyword,
+                    save_to_desktop=True,
+                    target_directory=str(company_folder),
+                    record_name=company_name,
+                )
             except Exception as exc:
                 print(f"  ✗ 裁判文书网查询异常（第 {attempt} 次）：{exc}")
                 result = None
@@ -144,7 +156,11 @@ def _run_wenshu_for_keywords(keywords: List[str], company_folder: Path, max_retr
         if not result:
             print(f"  ✗ 裁判文书网查询多次失败：{keyword}")
         if result:
-            _copy_screenshot(result.get("screenshot"), company_folder, f"WENSHU_{keyword}")
+            screenshot_path = result.get("screenshot")
+            if screenshot_path:
+                shot_parent = Path(screenshot_path).resolve().parent
+                if shot_parent != target_dir_resolved:
+                    _copy_screenshot(screenshot_path, company_folder, f"WENSHU_{keyword}")
         results.append((keyword, result))
     return results
 
@@ -167,7 +183,7 @@ def run_full_pipeline(company_name: str):
 
     wenshu_targets = [company_name]
     wenshu_targets.extend(person_targets)
-    _run_wenshu_for_keywords(wenshu_targets, company_folder)
+    _run_wenshu_for_keywords(wenshu_targets, company_folder, company_name)
 
     print("\n==> 流程结束")
     return {

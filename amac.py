@@ -18,6 +18,8 @@ import json
 from urllib.parse import quote
 from datetime import datetime
 
+from storage_utils import load_records, upsert_record, write_records
+
 def search_and_screenshot(search_query, save_to_desktop=True):
     """
     直接访问搜索URL，获取结果链接，访问并截图保存
@@ -222,26 +224,9 @@ def search_and_screenshot(search_query, save_to_desktop=True):
                     "queried_at": datetime.now().strftime("%Y%m%d_%H%M%S")
                 }
                 
-                # 若已存在，则以列表形式叠加；否则创建新列表
-                if os.path.exists(json_filepath):
-                    try:
-                        with open(json_filepath, 'r', encoding='utf-8') as f:
-                            existing = json.load(f)
-                    except Exception:
-                        existing = None
-                    
-                    if isinstance(existing, list):
-                        existing.append(record)
-                        data_to_write = existing
-                    elif isinstance(existing, dict):
-                        data_to_write = [existing, record]
-                    else:
-                        data_to_write = [record]
-                else:
-                    data_to_write = [record]
-                
-                with open(json_filepath, 'w', encoding='utf-8') as f:
-                    json.dump(data_to_write, f, indent=2, ensure_ascii=False)
+                existing_records = load_records(json_filepath)
+                updated_records = upsert_record(existing_records, record)
+                write_records(json_filepath, updated_records)
                 
                 print(f"\n查询记录已写入/更新: {json_filepath}")
                 
@@ -345,4 +330,3 @@ if __name__ == "__main__":
     
     # 返回结果供其他脚本使用
     sys.exit(0 if result else 1)
-
