@@ -47,6 +47,10 @@ def analyze_company(name: str):
     if not payload:
         raise RuntimeError("爬虫结果中没有 calculator_input 数据。")
     
+    if not crawl_result.get("top_shareholder"):
+        legal_rep = crawl_result.get("legal_representative")
+        if legal_rep:
+            crawl_result["top_shareholder"] = legal_rep
     calculator = build_calculator_from_payload(payload)
     
     print("\n=== 股东结构 ===")

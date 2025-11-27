@@ -298,7 +298,7 @@ def search_and_get_results(legal_name: str, company_name: str = None):
             print("无失信问题")
             print("=" * 60)
         else:
-            print(f"查询人{legal_name}存在失信问题")
+            print(f"查询人{legal_name}可能存在失信问题，请检查")
 
         return result_payload
 
