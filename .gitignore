@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific
+*.png
+*.jpg
+*.jpeg
+*.json
+captcha.jpg
+qcc_cookies.json
+
+# Logs
+*.log
+
+# Screenshots and data (用户数据，不应上传)
+# 注意：如果需要在仓库中保留示例数据，可以移除这些规则
+
