@@ -32,11 +32,10 @@
 ## 4. 单个脚本快捷入口
 | 场景 | 命令示例 | 备注 |
 | --- | --- | --- |
-| AMAC 基本信息 | `python amac.py "公司"` | 输出 `证监会_公司_时间.png` 与 JSON |
-| 企查查穿透 | `python nested_judge/qcc_nested.py "公司"` | 自动构建 `ShareholderCalculator` | 
-| CSRC 失信 | `python neris.py "姓名"` | 若提示人机验证，请按终端提示操作 |
-| 裁判文书网 | `python wenshu.py "关键词"` | 自 2024-XX 起，截图/JSON 会写到 pipeline 指定文件夹 |
-| 执行公告 | `python zxgk/zxgk.py "姓名"` | 需要人工输入验证码 |
+| AMAC 基本信息 | `python amac.py` | 输出 `证监会_公司_时间.png` 与 JSON |
+| 企查查穿透 | `python nested_judge/qcc_nested.py` | 自动构建 `ShareholderCalculator` | 
+| CSRC 失信 | `python neris.py` | 若提示人机验证，请按终端提示操作 |
+| 裁判文书网 | `python wenshu.py` | 需要手动输入验证码到控制台，截图/JSON 会写到 pipeline 指定文件夹 |
 
 ## 5. 结果校验与文件管理
 1. 桌面文件夹内的 JSON 可以直接用 VS Code、记事本或 Excel 打开，确认 `item`、`name`、`ret_url` 等字段。
@@ -47,6 +46,5 @@
 - **脚本停在登录界面**：检查是否被远程登录踢下线，或 Cookie 是否过期。
 - **ChromeDriver 下载失败**：确认网络可访问 Google 域名，必要时使用稳定代理。
 - **无法写入桌面**：确保当前用户对 `~/Desktop` 有写权限；也可把脚本参数 `save_to_desktop=False` 并自行指定目录。
-- **top_shareholder 为空**：系统会自动使用 `legal_representative`，无需手动补录。
 
 如上述步骤仍无法解决问题，请在 `README.md` 建议的渠道反馈，并附上运行命令与终端日志。
