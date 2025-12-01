@@ -25,7 +25,6 @@ if str(NESTED_DIR) not in sys.path:
 
 import amac as amac_spider
 from nested_judge import nested_judge as nested_processor
-from nested_judge import qcc_nested
 
 import shutil
 
@@ -80,19 +79,12 @@ def _run_amac(company_name: str):
 
 def _run_nested(company_name: str):
     print(f"\n==> [Nested Judge] 通过企查查获取股东结构")
-    crawl_result = qcc_nested.search_and_screenshot(
-        company_name,
-        cookies=qcc_nested.DEFAULT_COOKIES,
-        save_to_desktop=True,
-    )
-    if not crawl_result:
-        raise RuntimeError("企查查爬取失败，无法构建股东结构。")
+    analysis = nested_processor.analyze_company(company_name)
+    if not analysis:
+        raise RuntimeError("nested_judge 未返回分析结果。")
 
-    calculator_input = crawl_result.get("calculator_input") or {}
-    calculator = nested_processor.build_calculator_from_payload(calculator_input)
-    major_shareholders = calculator.get_major_shareholders()
-
-    legal_rep = crawl_result.get("legal_representative")
+    legal_rep = analysis.get("legal_representative")
+    major_shareholders = analysis.get("major_shareholders") or []
     print(f"法定代表人: {legal_rep or '未识别'}")
     if major_shareholders:
         print("受益所有人（>=30%）：")
@@ -120,7 +112,7 @@ def _run_wenshu_for_keywords(
     keywords: List[str],
     company_folder: Path,
     company_name: str,
-    max_retries: int = 3,
+    max_retries: int = 5,
     retry_delay: float = 2.0,
 ):
     print("\n==> [Wenshu] 开始逐个关键词搜索并截图")

@@ -38,7 +38,7 @@ from storage_utils import load_records, upsert_record, write_records
 # 不能并发，这个账号会被退出
 DEFAULT_COOKIES = {
     'QCCSESSID': 'a1254941d8848e0a4f88c78062',
-    'acw_tc': '1a0c599817642045157114141ed671663c3b7d38ff7ef72a677519972f8e05',
+    'acw_tc': '1a0c399917645572146877729e9fcf08370bfe5d8781c8669da8440379b080',
     'qcc_did': '11b92845-5179-4bed-8afd-82b0ace93c60'
 }
 
