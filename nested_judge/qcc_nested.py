@@ -38,7 +38,7 @@ from storage_utils import load_records, upsert_record, write_records
 # 不能并发，这个账号会被退出
 DEFAULT_COOKIES = {
     'QCCSESSID': 'a1254941d8848e0a4f88c78062',
-    'acw_tc': '1a0c399917645572146877729e9fcf08370bfe5d8781c8669da8440379b080',
+    'acw_tc': '0a472f4a17645648224012787e0c021e0a6332e95fea18f7e4639013f4bac2',
     'qcc_did': '11b92845-5179-4bed-8afd-82b0ace93c60'
 }
 
@@ -289,6 +289,7 @@ def _navigate_to_company_page(driver, search_query: str):
         (By.CSS_SELECTOR, '.main-list a'),
     ]
     
+    result_found = False
     for selector_type, selector in result_selectors:
         try:
             elements = driver.find_elements(selector_type, selector)
@@ -304,12 +305,23 @@ def _navigate_to_company_page(driver, search_query: str):
                 result_link = href
                 print(f"找到结果链接: {text}")
                 print(f"链接URL: {href}")
+                result_found = True
                 break
         if result_link:
             break
     
     if not result_link:
-        print("未找到特定结果链接，将使用当前搜索结果页面。")
+        print("未查找到搜索结果，将使用当前搜索结果页面。")
+        try:
+            login_overlay = driver.find_elements(By.CSS_SELECTOR, "div.qcc-login-qrcode")
+            if login_overlay:
+                print("检测到登录界面，请切换到浏览器窗口完成登录后返回本终端，按回车继续…")
+                try:
+                    input()
+                except EOFError:
+                    pass
+        except Exception:
+            pass
         result_link = driver.current_url
     else:
         print(f"\n正在访问结果页面: {result_link}")
