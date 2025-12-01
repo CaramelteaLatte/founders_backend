@@ -322,11 +322,14 @@ def _navigate_to_company_page(driver, search_query: str):
                     pass
         except Exception:
             pass
-    
-    result_link = driver.current_url
-    print(f"\n正在访问结果页面: {result_link}")
-    driver.get(result_link)
-    _human_pause(2.5, 4.0)
+        print(f"\n正在访问结果页面: {result_link}")
+        driver.get(result_link)
+        _human_pause(2.5, 4.0)
+        # result_link = driver.current_url
+    else:
+        print(f"\n正在访问结果页面: {result_link}")
+        driver.get(result_link)
+        _human_pause(2.5, 4.0)
     
     return search_url, result_link
 
