@@ -127,15 +127,15 @@ def search_and_screenshot(search_query, save_to_desktop=True):
                 time.sleep(2)
                 
                 # 根据HTML结构，信息可能在以下位置：
-                # 1. div.countBox li.text 或 li.text.w25（列表项结构）
-                # 2. div.countBox div.text（div结构）
+                # 1. div.countBox div.text（div结构，包含 span.tit 和 span）
+                # 2. div.countBox li.text 或 li.text.w25（列表项结构）
                 # 每个元素包含 span.tit（标题）和 span（值）
                 info_selectors = [
+                    'div.countBox div.text',  # div结构（优先，根据图片描述）
+                    '.countBox div.text',  # 备用选择器
                     'div.countBox li.text',  # 列表项结构（如 li.text.w25）
                     'div.countBox li.text.w25',  # 带w25类的列表项
                     '.countBox li.text',  # 备用选择器
-                    'div.countBox div.text',  # div结构（原有）
-                    '.countBox div.text',  # 备用选择器
                 ]
                 
                 info_elements = []
@@ -143,45 +143,116 @@ def search_and_screenshot(search_query, save_to_desktop=True):
                     try:
                         elements = driver.find_elements(By.CSS_SELECTOR, selector)
                         if elements:
-                            info_elements = elements
-                            print(f"使用选择器 '{selector}' 找到 {len(elements)} 条信息元素")
-                            break
-                    except Exception:
+                            # 验证这些元素是否真的包含 span.tit
+                            valid_elements = []
+                            for elem in elements:
+                                try:
+                                    tit_spans = elem.find_elements(By.CSS_SELECTOR, 'span.tit')
+                                    if tit_spans:
+                                        valid_elements.append(elem)
+                                except:
+                                    pass
+                            
+                            if valid_elements:
+                                info_elements = valid_elements
+                                print(f"使用选择器 '{selector}' 找到 {len(valid_elements)} 条有效信息元素（包含span.tit）")
+                                break
+                            elif elements:
+                                print(f"选择器 '{selector}' 找到 {len(elements)} 个元素，但都不包含 span.tit，继续尝试...")
+                    except Exception as e:
+                        print(f"选择器 '{selector}' 出错: {e}")
                         continue
                 
                 if not info_elements:
-                    print("未找到信息元素，尝试更宽泛的选择器...")
-                    # 最后尝试：查找所有包含 span.tit 的元素
+                    print("未找到包含 span.tit 的信息元素，尝试更宽泛的选择器...")
+                    # 最后尝试：使用 XPath 查找所有包含 span.tit 的元素
                     try:
-                        info_elements = driver.find_elements(By.CSS_SELECTOR, 'div.countBox *:has(span.tit), .countBox *:has(span.tit)')
-                        if not info_elements:
-                            # 如果 :has() 不支持，使用 XPath
-                            info_elements = driver.find_elements(By.XPATH, '//div[contains(@class,"countBox")]//*[span[@class="tit"]]')
-                    except Exception:
-                        pass
+                        info_elements = driver.find_elements(By.XPATH, '//div[contains(@class,"countBox")]//*[span[@class="tit"]]')
+                        if info_elements:
+                            print(f"使用 XPath 找到 {len(info_elements)} 条信息元素")
+                    except Exception as e:
+                        print(f"XPath 查找失败: {e}")
                 
                 print(f"共找到 {len(info_elements)} 条信息元素")
                 
-                for element in info_elements:
+                for idx, element in enumerate(info_elements):
                     try:
                         # 提取标题（span.tit）
                         title_elements = element.find_elements(By.CSS_SELECTOR, 'span.tit')
-                        # 提取值（span，但不是span.tit）
-                        value_elements = element.find_elements(By.CSS_SELECTOR, 'span:not(.tit)')
+                        if not title_elements:
+                            # 尝试其他方式查找标题
+                            title_elements = element.find_elements(By.XPATH, './/span[contains(@class,"tit")]')
                         
-                        if title_elements and value_elements:
-                            title = title_elements[0].text.strip()
-                            # 移除末尾的冒号
-                            if title.endswith(':'):
-                                title = title[:-1]
-                            
-                            # 获取所有值的文本（可能有多个span）
-                            value = ' '.join([v.text.strip() for v in value_elements if v.text.strip()])
-                            
-                            if title and value:
-                                company_info[title] = value
-                                print(f"  {title}: {value}")
+                        if not title_elements:
+                            # 调试：打印元素的HTML结构
+                            element_html = element.get_attribute('outerHTML')[:200]
+                            print(f"  元素 {idx+1}: 未找到标题元素，HTML片段: {element_html}...")
+                            continue
+                        
+                        title = title_elements[0].text.strip()
+                        if title.endswith(':'):
+                            title = title[:-1]
+                        if not title:
+                            # 调试：打印标题元素的属性
+                            title_attr = title_elements[0].get_attribute('outerHTML')
+                            print(f"  元素 {idx+1}: 标题为空，标题元素HTML: {title_attr}")
+                            continue
+
+                        # 提取值：尝试多种方式
+                        value = None
+                        
+                        # 方式1：查找非tit的span
+                        value_elements = element.find_elements(By.CSS_SELECTOR, 'span:not(.tit)')
+                        if value_elements:
+                            value_texts = [v.text.strip() for v in value_elements if v.text.strip() and v.text.strip() != title]
+                            if value_texts:
+                                value = ' '.join(value_texts)
+                        
+                        # 方式2：如果方式1失败，尝试查找所有子元素（排除标题）
+                        if not value:
+                            all_spans = element.find_elements(By.CSS_SELECTOR, 'span')
+                            value_texts = []
+                            for span in all_spans:
+                                span_text = span.text.strip()
+                                # 排除标题和空文本
+                                if span_text and span_text != title and not span_text.endswith(':'):
+                                    # 检查是否包含tit类
+                                    span_class = span.get_attribute('class') or ''
+                                    if 'tit' not in span_class:
+                                        value_texts.append(span_text)
+                            if value_texts:
+                                value = ' '.join(value_texts)
+                        
+                        # 方式3：如果前两种方式都失败，从整个元素文本中提取
+                        if not value:
+                            full_text = element.text.strip()
+                            # 移除标题部分
+                            if full_text.startswith(title):
+                                value = full_text[len(title):].strip(" ：:\n\t")
+                            elif ':' in full_text:
+                                # 如果包含冒号，取冒号后的内容
+                                parts = full_text.split(':', 1)
+                                if len(parts) > 1:
+                                    value = parts[1].strip()
+                            else:
+                                value = full_text
+                        
+                        # 方式4：尝试查找其他可能的元素（p, a, div等）
+                        if not value or not value.strip():
+                            other_elements = element.find_elements(By.CSS_SELECTOR, 'p, a, div.value, div')
+                            for other in other_elements:
+                                other_text = other.text.strip()
+                                if other_text and other_text != title:
+                                    value = other_text
+                                    break
+
+                        if value and value.strip():
+                            company_info[title] = value.strip()
+                            print(f"  ✓ {title}: {value.strip()}")
+                        else:
+                            print(f"  ✗ 元素 {idx+1} ({title}): 无法提取值，原始文本: {element.text[:100]}")
                     except Exception as e:
+                        print(f"  ✗ 元素 {idx+1}: 提取时出错: {str(e)}")
                         continue
                 
                 print(f"\n成功提取 {len(company_info)} 条企业信息")
