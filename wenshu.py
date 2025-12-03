@@ -14,6 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import StaleElementReferenceException
 
 import os
 import sys
@@ -204,96 +205,139 @@ def fill_login_and_screenshot(
         # 处理验证码：下载、展示、等待用户输入并填入
         cap_input = None
         cap_img = None
-        try:
-            # 留在 iframe 内部定位验证码
-            for by_, sel in [
-                (By.CSS_SELECTOR, "input[name='captcha']"),
-                (By.XPATH, '//input[@name="captcha" or contains(@placeholder,"验证码")]'),
-            ]:
-                try:
-                    cap_input = wait.until(EC.presence_of_element_located((by_, sel)))
-                    if cap_input:
-                        print(f"已定位验证码输入框: {sel}")
-                        break
-                except Exception:
-                    continue
-            for by_, sel in [
-                (By.CSS_SELECTOR, "img.captcha-img"),
-                (By.XPATH, '//img[contains(@class,"captcha") or contains(@src,"data:image")]'),
-            ]:
-                try:
-                    cap_img = wait.until(EC.presence_of_element_located((by_, sel)))
-                    if cap_img:
-                        print(f"已定位验证码图片: {sel}")
-                        break
-                except Exception:
-                    continue
+        iframe_ret_url = ""
+        cap_input_selectors = [
+            (By.CSS_SELECTOR, "input[name='captcha']"),
+            (By.XPATH, '//input[@name="captcha" or contains(@placeholder,"验证码")]'),
+        ]
+        cap_img_selectors = [
+            (By.CSS_SELECTOR, "img.captcha-img"),
+            (By.XPATH, '//img[contains(@class,"captcha") or contains(@src,"data:image")]'),
+        ]
 
-            if cap_img:
-                # 组织目录
+        def _locate_captcha_input(log_if_found: bool = True):
+            for by_, sel in cap_input_selectors:
+                try:
+                    elem = wait.until(EC.presence_of_element_located((by_, sel)))
+                    if elem:
+                        if log_if_found:
+                            print(f"已定位验证码输入框: {sel}")
+                        return elem
+                except Exception:
+                    continue
+            return None
+
+        def _locate_captcha_image(log_if_found: bool = True):
+            for by_, sel in cap_img_selectors:
+                try:
+                    elem = wait.until(EC.presence_of_element_located((by_, sel)))
+                    if elem:
+                        if log_if_found:
+                            print(f"已定位验证码图片: {sel}")
+                        return elem
+                except Exception:
+                    continue
+            return None
+
+        def _save_captcha_image(cap_img_element, save_dir: str, attempt_index: int) -> str | None:
+            ts_cap = datetime.now().strftime("%Y%m%d_%H%M%S")
+            cap_path = os.path.join(save_dir, f"WENSHU_验证码_{ts_cap}_try{attempt_index}.png")
+            saved_ok = False
+            try:
+                src = cap_img_element.get_attribute("src") or ""
+                print(f"验证码图片 src 前缀: {src[:30]}...")
+                if src.startswith("data:image"):
+                    try:
+                        b64 = src.split(",", 1)[1]
+                        with open(cap_path, "wb") as f:
+                            f.write(base64.b64decode(b64))
+                        saved_ok = os.path.exists(cap_path) and os.path.getsize(cap_path) > 0
+                        if saved_ok:
+                            print("已从 data URL 解码保存验证码图片")
+                    except Exception:
+                        saved_ok = False
+                if not saved_ok:
+                    cap_img_element.screenshot(cap_path)
+                    saved_ok = os.path.exists(cap_path) and os.path.getsize(cap_path) > 0
+                    if saved_ok:
+                        print("已通过元素截图保存验证码图片")
+            except Exception:
+                saved_ok = False
+
+            if not saved_ok:
+                print("未能保存验证码图片，请在页面中自行查看。")
+                return None
+
+            try:
+                if platform.system() == "Darwin":
+                    subprocess.Popen(["open", cap_path])
+                elif platform.system() == "Windows":
+                    os.startfile(cap_path)  # type: ignore[attr-defined]
+                else:
+                    subprocess.Popen(["xdg-open", cap_path])
+            except Exception:
+                pass
+            print(f"已保存验证码图片：{cap_path}")
+            return cap_path
+
+        try:
+            cap_input = _locate_captcha_input()
+            cap_img = _locate_captcha_image()
+            if cap_input and cap_img:
                 desktop_path = os.path.join(os.path.expanduser("~"), "Desktop") if save_to_desktop else os.getcwd()
                 save_dir = os.path.join(desktop_path, "文书网登录")
                 os.makedirs(save_dir, exist_ok=True)
-                ts_cap = datetime.now().strftime("%Y%m%d_%H%M%S")
-                cap_path = os.path.join(save_dir, f"WENSHU_验证码_{ts_cap}.png")
+                max_captcha_attempts = 5
+                attempt_index = 0
 
-                # 优先从 data URL 保存
-                saved_ok = False
-                try:
-                    src = cap_img.get_attribute("src") or ""
-                    print(f"验证码图片 src 前缀: {src[:30]}...")
-                    if src.startswith("data:image"):
-                        try:
-                            b64 = src.split(",", 1)[1]
-                            with open(cap_path, "wb") as f:
-                                f.write(base64.b64decode(b64))
-                            saved_ok = os.path.exists(cap_path) and os.path.getsize(cap_path) > 0
-                            print("已从 data URL 解码保存验证码图片")
-                        except Exception:
-                            saved_ok = False
-                    if not saved_ok:
-                        cap_img.screenshot(cap_path)
-                        saved_ok = os.path.exists(cap_path) and os.path.getsize(cap_path) > 0
-                        if saved_ok:
-                            print("已通过元素截图保存验证码图片")
-                except Exception:
-                    pass
-
-                if saved_ok:
-                    try:
-                        if platform.system() == "Darwin":
-                            subprocess.Popen(["open", cap_path])
-                        elif platform.system() == "Windows":
-                            os.startfile(cap_path)  # type: ignore[attr-defined]
+                while attempt_index < max_captcha_attempts:
+                    attempt_index += 1
+                    print(f"开始进行验证码尝试 #{attempt_index}")
+                    # 确保元素未过期
+                    for elem_name, current_elem, locator in [
+                        ("输入框", cap_input, _locate_captcha_input),
+                        ("图片", cap_img, _locate_captcha_image),
+                    ]:
+                        refreshed = current_elem
+                        if refreshed:
+                            try:
+                                _ = refreshed.is_displayed()
+                            except StaleElementReferenceException:
+                                refreshed = None
+                            except Exception:
+                                refreshed = None
+                        if refreshed is None:
+                            refreshed = locator(log_if_found=False)
+                        if elem_name == "输入框":
+                            cap_input = refreshed
                         else:
-                            subprocess.Popen(["xdg-open", cap_path])
-                    except Exception:
-                        pass
-                    print(f"已保存验证码图片：{cap_path}")
-                else:
-                    print("未能保存验证码图片，请在页面中自行查看。")
+                            cap_img = refreshed
 
-                # 让用户输入验证码并填入
-                try:
-                    captcha_text = input("请输入验证码：").strip()
-                except KeyboardInterrupt:
-                    captcha_text = ""
-                if captcha_text:
+                    if not cap_input or not cap_img:
+                        print("无法定位验证码输入框或图片，结束验证码流程。")
+                        break
+
+                    _save_captcha_image(cap_img, save_dir, attempt_index)
+
+                    try:
+                        captcha_text = input("请输入验证码：").strip()
+                    except KeyboardInterrupt:
+                        captcha_text = ""
+                    if not captcha_text:
+                        print("未输入验证码，结束验证码流程。")
+                        break
+
                     try:
                         cap_input.clear()
                         cap_input.send_keys(captcha_text)
                         print("验证码已输入")
-                        # 回车尝试直接登录
                         try:
                             cap_input.send_keys(Keys.ENTER)
                             print("回车尝试登录")
                             time.sleep(4)
                         except Exception:
                             print("回车尝试直接登录失败")
-                            pass
-                        
                     except Exception:
-                        # 兜底用 JS 赋值
                         try:
                             driver.execute_script(
                                 "arguments[0].focus();arguments[0].value=arguments[1];"
@@ -304,47 +348,70 @@ def fill_login_and_screenshot(
                             print("已通过 JS 写入验证码")
                         except Exception:
                             pass
-                # 点击“登录”按钮（在 iframe 内）
-                try:
-                    prev_iframe_url = driver.execute_script("return window.location.href")
-                except Exception:
-                    prev_iframe_url = ""
-                clicked = False
-                print("尝试点击登录按钮...")
-                for by_, sel in [
-                    (By.XPATH, '//span[contains(@class,"button-primary") and @data-api="/api/login"]'),
-                    (By.CSS_SELECTOR, 'span.button.button-primary[data-api="/api/login"]'),
-                    (By.XPATH, '//span[contains(.,"登录") and contains(@class,"button-primary")]'),
-                ]:
+
                     try:
-                        login_btn = wait.until(EC.element_to_be_clickable((by_, sel)))
-                        if login_btn:
-                            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", login_btn)
-                            driver.execute_script("arguments[0].click();", login_btn)
-                            clicked = True
-                            print(f"已点击登录按钮: {sel}")
-                            break
+                        prev_iframe_url = driver.execute_script("return window.location.href")
                     except Exception:
+                        prev_iframe_url = ""
+
+                    print("尝试点击登录按钮...")
+                    for by_, sel in [
+                        (By.XPATH, '//span[contains(@class,"button-primary") and @data-api="/api/login"]'),
+                        (By.CSS_SELECTOR, 'span.button.button-primary[data-api="/api/login"]'),
+                        (By.XPATH, '//span[contains(.,"登录") and contains(@class,"button-primary")]'),
+                    ]:
+                        try:
+                            login_btn = wait.until(EC.element_to_be_clickable((by_, sel)))
+                            if login_btn:
+                                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", login_btn)
+                                driver.execute_script("arguments[0].click();", login_btn)
+                                print(f"已点击登录按钮: {sel}")
+                                break
+                        except Exception:
+                            continue
+
+                    print("等待登录结果（iframe URL 变化或页面跳转）...")
+                    url_changed = False
+                    try:
+                        WebDriverWait(driver, 8).until(
+                            lambda d: d.execute_script("return window.location.href") != prev_iframe_url
+                        )
+                        print("检测到 iframe URL 变化")
+                        url_changed = True
+                    except Exception:
+                        print("未检测到明显的 URL 变化，可能仍在当前页面")
+
+                    try:
+                        iframe_ret_url = driver.execute_script("return window.location.href")
+                        print(f"iframe 返回地址：{iframe_ret_url}")
+                    except Exception:
+                        iframe_ret_url = ""
+
+                    if url_changed:
+                        break
+
+                    need_retry = False
+                    try:
+                        hint_elements = driver.find_elements(By.XPATH, "//*[contains(text(),'验证码错误')]")
+                        for hint in hint_elements:
+                            try:
+                                if hint and hint.is_displayed() and "验证码错误" in (hint.text or ""):
+                                    need_retry = True
+                                    break
+                            except Exception:
+                                continue
+                    except Exception:
+                        need_retry = False
+
+                    if need_retry:
+                        print("验证码错误或验证码已过期，即将重新下载验证码并重试...")
+                        cap_input = _locate_captcha_input(log_if_found=False)
+                        cap_img = _locate_captcha_image(log_if_found=False)
                         continue
-                # 等待 iframe 内地址或页面状态变化
-                print("等待登录结果（iframe URL 变化或页面跳转）...")
-                try:
-                    WebDriverWait(driver, 8).until(
-                        lambda d: d.execute_script("return window.location.href") != prev_iframe_url
-                    )
-                    print("检测到 iframe URL 变化")
-                except Exception:
-                    print("未检测到明显的 URL 变化，可能仍在当前页面")
-                    pass
-                try:
-                    iframe_ret_url = driver.execute_script("return window.location.href")
-                    print(f"iframe 返回地址：{iframe_ret_url}")
-                except Exception:
-                    iframe_ret_url = ""
-            else:
-                iframe_ret_url = ""
-        except Exception as _:
-            # 忽略验证码流程失败，继续截图
+
+                    print("未检测到验证码错误的提示，结束验证码流程。")
+                    break
+        except Exception:
             iframe_ret_url = ""
 
         # 回到主文档后再截图（可选）
