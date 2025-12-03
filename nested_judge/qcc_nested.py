@@ -271,14 +271,8 @@ def _scrape_shareholders(driver) -> List[Dict[str, Any]]:
     return shareholders
 
 
-def _navigate_to_company_page(driver, search_query: str):
-    """Search for the company and navigate to the first result page."""
-    search_url = f"https://www.qcc.com/web/search?key={quote(search_query)}"
-    print(f"正在访问搜索页面: {search_url}")
-    driver.get(search_url)
-    _human_pause(2.0, 3.5)
-    
-    print("正在查找搜索结果...")
+def _find_search_result_link(driver):
+    """Look through known selectors for a company result link."""
     result_link = None
     result_selectors = [
         (By.CSS_SELECTOR, '.search-result-item a'),
@@ -289,7 +283,6 @@ def _navigate_to_company_page(driver, search_query: str):
         (By.CSS_SELECTOR, '.main-list a'),
     ]
     
-    result_found = False
     for selector_type, selector in result_selectors:
         try:
             elements = driver.find_elements(selector_type, selector)
@@ -305,13 +298,24 @@ def _navigate_to_company_page(driver, search_query: str):
                 result_link = href
                 print(f"找到结果链接: {text}")
                 print(f"链接URL: {href}")
-                result_found = True
-                break
+                return result_link
         if result_link:
             break
+    return result_link
+
+
+def _navigate_to_company_page(driver, search_query: str):
+    """Search for the company and navigate to the first result page."""
+    search_url = f"https://www.qcc.com/web/search?key={quote(search_query)}"
+    print(f"正在访问搜索页面: {search_url}")
+    driver.get(search_url)
+    _human_pause(2.0, 3.5)
+    
+    print("正在查找搜索结果...")
+    result_link = _find_search_result_link(driver)
     
     if not result_link:
-        print("未查找到搜索结果，将使用当前搜索结果页面。")
+        login_prompted = False
         try:
             login_overlay = driver.find_elements(By.CSS_SELECTOR, "div.qcc-login-qrcode")
             if login_overlay:
@@ -320,18 +324,30 @@ def _navigate_to_company_page(driver, search_query: str):
                     input()
                 except EOFError:
                     pass
+                login_prompted = True
         except Exception:
             pass
-        print(f"\n正在访问结果页面: {result_link}")
-        driver.get(result_link)
-        _human_pause(2.5, 4.0)
-        # result_link = driver.current_url
-    else:
-        print(f"\n正在访问结果页面: {result_link}")
-        driver.get(result_link)
-        _human_pause(2.5, 4.0)
+        
+        if login_prompted:
+            try:
+                current_url = driver.current_url or search_url
+                if current_url:
+                    print(f"登录后重新加载搜索页面: {current_url}")
+                    driver.get(current_url)
+                    _human_pause(2.0, 3.5)
+            except Exception as reload_err:
+                print(f"重新加载搜索页面失败: {reload_err}")
+            print("再次查找搜索结果...")
+            result_link = _find_search_result_link(driver)
     
-    return search_url, result_link
+    final_url = result_link or driver.current_url or search_url
+    if not final_url:
+        final_url = search_url
+    print(f"\n正在访问结果页面: {final_url}")
+    driver.get(final_url)
+    _human_pause(2.5, 4.0)
+    
+    return search_url, final_url
 
 
 def _collect_shareholder_structure(driver, company_name: str, visited=None, cache=None):
