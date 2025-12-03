@@ -98,6 +98,32 @@ def _ensure_fullpage_screenshot(driver) -> None:
         pass
 
 
+def _wait_for_manual_verification(driver) -> None:
+    """Prompt user to finish WAF verification if redirected to the human-check page."""
+    try:
+        current_url = driver.current_url or ""
+    except Exception:
+        current_url = ""
+    if "waf_text_verify" not in current_url:
+        return
+    print("\n检测到人机验证页面，需要你在浏览器中手动完成验证。")
+    print("请切换到浏览器完成验证码或问答，并等页面自动跳转。")
+    while True:
+        try:
+            input("完成验证后回到终端按回车继续：")
+        except EOFError:
+            pass
+        time.sleep(1.0)
+        try:
+            current_url = driver.current_url or ""
+        except Exception:
+            current_url = ""
+        if "waf_text_verify" not in current_url:
+            print("检测到人机验证已通过，继续执行。")
+            break
+        print("仍在人机验证页面，如果已完成请等待网站跳转后再按回车。")
+
+
 def fill_login_and_screenshot(
     username: str,
     password: str,
@@ -419,6 +445,7 @@ def fill_login_and_screenshot(
             driver.switch_to.default_content()
         except Exception:
             pass
+        _wait_for_manual_verification(driver)
 
         # 在返回页面上执行一次搜索：询问用户关键词 -> 填入搜索框 -> 触发搜索 -> 等待渲染
         try:
